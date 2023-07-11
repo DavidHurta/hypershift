@@ -405,7 +405,7 @@ func hyperShiftOperatorManifests(opts Options) ([]crclient.Object, error) {
 	}.Build()
 	objects = append(objects, operatorServiceAccount)
 
-	operatorClusterRole := assets.HyperShiftOperatorClusterRole{}.Build()
+	operatorClusterRole := assets.HyperShiftOperatorClusterRole{}.Build(opts.RHOBSMonitoring)
 	objects = append(objects, operatorClusterRole)
 
 	operatorClusterRoleBinding := assets.HyperShiftOperatorClusterRoleBinding{

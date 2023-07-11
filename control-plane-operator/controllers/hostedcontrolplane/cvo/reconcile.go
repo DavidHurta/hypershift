@@ -108,7 +108,7 @@ func cvoLabels() map[string]string {
 
 var port int32 = 8443
 
-func ReconcileDeployment(deployment *appsv1.Deployment, ownerRef config.OwnerRef, deploymentConfig config.DeploymentConfig, controlPlaneImage, image, cliImage, availabilityProberImage, clusterID string, platformType hyperv1.PlatformType, oauthEnabled bool) error {
+func ReconcileDeployment(deployment *appsv1.Deployment, ownerRef config.OwnerRef, deploymentConfig config.DeploymentConfig, controlPlaneImage, image, cliImage, availabilityProberImage, clusterID string, platformType hyperv1.PlatformType, oauthEnabled, isManagementClusterOpenShift, rhobsMonitoring bool) error {
 	ownerRef.ApplyTo(deployment)
 
 	// preserve existing resource requirements for main CVO container
@@ -129,13 +129,14 @@ func ReconcileDeployment(deployment *appsv1.Deployment, ownerRef config.OwnerRef
 				Labels: cvoLabels(),
 			},
 			Spec: corev1.PodSpec{
-				AutomountServiceAccountToken: pointer.Bool(false),
+				ServiceAccountName:           manifests.ClusterVersionOperatorServiceAccount("").Name,
+				AutomountServiceAccountToken: pointer.Bool(true),
 				InitContainers: []corev1.Container{
 					util.BuildContainer(cvoContainerPrepPayload(), buildCVOContainerPrepPayload(image, platformType, oauthEnabled)),
 					util.BuildContainer(cvoContainerBootstrap(), buildCVOContainerBootstrap(cliImage, clusterID)),
 				},
 				Containers: []corev1.Container{
-					util.BuildContainer(cvoContainerMain(), buildCVOContainerMain(controlPlaneImage, image)),
+					util.BuildContainer(cvoContainerMain(), buildCVOContainerMain(controlPlaneImage, image, deployment.Namespace, isManagementClusterOpenShift, rhobsMonitoring)),
 				},
 				Volumes: []corev1.Volume{
 					util.BuildVolume(cvoVolumePayload(), buildCVOVolumePayload),
@@ -318,7 +319,7 @@ oc get clusterversion/version &> /dev/null || oc create -f /tmp/clusterversion.y
 	return fmt.Sprintf(scriptTemplate, clusterID, payloadDir)
 }
 
-func buildCVOContainerMain(image, releaseImage string) func(c *corev1.Container) {
+func buildCVOContainerMain(image, releaseImage, namespace string, isManagementClusterOpenShift, rhobsMonitoring bool) func(c *corev1.Container) {
 	cpath := func(vol, file string) string {
 		return path.Join(volumeMounts.Path(cvoContainerMain().Name, vol), file)
 	}
@@ -335,7 +336,13 @@ func buildCVOContainerMain(image, releaseImage string) func(c *corev1.Container)
 			fmt.Sprintf("--listen=0.0.0.0:%d", port),
 			fmt.Sprintf("--serving-cert-file=%s", cpath(cvoVolumeServerCert().Name, corev1.TLSCertKey)),
 			fmt.Sprintf("--serving-key-file=%s", cpath(cvoVolumeServerCert().Name, corev1.TLSPrivateKeyKey)),
+			"--hypershift=true",
 			"--v=4",
+		}
+		if isManagementClusterOpenShift && !rhobsMonitoring {
+			c.Args = append(c.Args, "--use-dns-for-services=true")
+			c.Args = append(c.Args, "--metrics-ca-bundle-file=/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt")
+			c.Args = append(c.Args, fmt.Sprintf("--metrics-url=https://thanos-querier.openshift-monitoring.svc:9092?namespace=%s", namespace))
 		}
 		c.Env = []corev1.EnvVar{
 			{
@@ -403,6 +410,7 @@ func cvoVolumeServerCert() *corev1.Volume {
 		Name: "server-crt",
 	}
 }
+
 func buildCVOVolumeServerCert(v *corev1.Volume) {
 	if v.Secret == nil {
 		v.Secret = &corev1.SecretVolumeSource{}
@@ -476,5 +484,39 @@ func ReconcileServiceMonitor(sm *prometheusoperatorv1.ServiceMonitor, ownerRef c
 
 	util.ApplyClusterIDLabel(&sm.Spec.Endpoints[0], clusterID)
 
+	return nil
+}
+
+func ReconcileRole(role *rbacv1.Role, ownerRef config.OwnerRef, isManagementClusterOpenShift, rhobsMonitoring bool) error {
+	if isManagementClusterOpenShift && !rhobsMonitoring {
+		role.Rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"metrics.k8s.io"},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get"},
+			},
+		}
+	}
+	return nil
+}
+
+func ReconcileRoleBinding(rb *rbacv1.RoleBinding, role *rbacv1.Role, ownerRef config.OwnerRef, namespace string) error {
+	rb.RoleRef = rbacv1.RoleRef{
+		APIGroup: rbacv1.SchemeGroupVersion.Group,
+		Kind:     "Role",
+		Name:     role.Name,
+	}
+	rb.Subjects = []rbacv1.Subject{
+		{
+			Kind:      "ServiceAccount",
+			Name:      manifests.ClusterVersionOperatorServiceAccount("").Name,
+			Namespace: namespace,
+		},
+	}
+	return nil
+}
+
+func ReconcileServiceAccount(sa *corev1.ServiceAccount, ownerRef config.OwnerRef) error {
+	ownerRef.ApplyTo(sa)
 	return nil
 }

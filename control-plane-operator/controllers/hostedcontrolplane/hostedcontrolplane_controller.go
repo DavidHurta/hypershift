@@ -164,6 +164,8 @@ type HostedControlPlaneReconciler struct {
 	ec2Client                     ec2iface.EC2API
 	awsSession                    *session.Session
 	reconcileInfrastructureStatus func(ctx context.Context, hcp *hyperv1.HostedControlPlane) (InfrastructureStatus, error)
+	RHOBSMonitoring               bool
+	IsManagementClusterOpenShift  bool
 }
 
 func (r *HostedControlPlaneReconciler) SetupWithManager(mgr ctrl.Manager, createOrUpdate upsert.CreateOrUpdateFN) error {
@@ -2875,9 +2877,30 @@ func (r *HostedControlPlaneReconciler) reconcileClusterVersionOperator(ctx conte
 		}
 	}
 
+	sa := manifests.ClusterVersionOperatorServiceAccount(hcp.Namespace)
+	if _, err := createOrUpdate(ctx, r.Client, sa, func() error {
+		return cvo.ReconcileServiceAccount(sa, p.OwnerRef)
+	}); err != nil {
+		return fmt.Errorf("failed to reconcile cluster version operator serviceaccount: %w", err)
+	}
+
+	role := manifests.ClusterVersionOperatorRole(hcp.Namespace)
+	if _, err := createOrUpdate(ctx, r.Client, role, func() error {
+		return cvo.ReconcileRole(role, p.OwnerRef, r.IsManagementClusterOpenShift, r.RHOBSMonitoring)
+	}); err != nil {
+		return fmt.Errorf("failed to reconcile cluster version operator role: %w", err)
+	}
+
+	rb := manifests.ClusterVersionOperatorRoleBinding(hcp.Namespace)
+	if _, err := createOrUpdate(ctx, r.Client, rb, func() error {
+		return cvo.ReconcileRoleBinding(rb, role, p.OwnerRef, hcp.Namespace)
+	}); err != nil {
+		return fmt.Errorf("failed to reconcile cluster version operator rolebinding: %w", err)
+	}
+
 	deployment := manifests.ClusterVersionOperatorDeployment(hcp.Namespace)
 	if _, err := createOrUpdate(ctx, r, deployment, func() error {
-		return cvo.ReconcileDeployment(deployment, p.OwnerRef, p.DeploymentConfig, p.ControlPlaneImage, p.Image, p.CLIImage, p.AvailabilityProberImage, p.ClusterID, p.PlatformType, util.HCPOAuthEnabled(hcp))
+		return cvo.ReconcileDeployment(deployment, p.OwnerRef, p.DeploymentConfig, p.ControlPlaneImage, p.Image, p.CLIImage, p.AvailabilityProberImage, p.ClusterID, p.PlatformType, util.HCPOAuthEnabled(hcp), r.IsManagementClusterOpenShift, r.RHOBSMonitoring)
 	}); err != nil {
 		return fmt.Errorf("failed to reconcile cluster version operator deployment: %w", err)
 	}

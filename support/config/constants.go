@@ -5,6 +5,10 @@ const (
 	// to prevent any pod which doesn't contain the label from accessing the management cluster KAS.
 	NeedManagementKASAccessLabel = "hypershift.openshift.io/need-management-kas-access"
 
+	// NeedMetricsServerAccessLabel is used by network policies
+	// to allow egress communication to the metrics server on the management cluster.
+	NeedMetricsServerAccessLabel = "hypershift.openshift.io/need-metrics-server-access"
+
 	// EtcdPriorityClass is for etcd pods.
 	EtcdPriorityClass = "hypershift-etcd"
 

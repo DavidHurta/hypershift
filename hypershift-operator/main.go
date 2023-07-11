@@ -49,6 +49,7 @@ import (
 	"github.com/openshift/hypershift/support/capabilities"
 	"github.com/openshift/hypershift/support/metrics"
 	"github.com/openshift/hypershift/support/releaseinfo"
+	"github.com/openshift/hypershift/support/rhobsmonitoring"
 	"github.com/openshift/hypershift/support/upsert"
 	hyperutil "github.com/openshift/hypershift/support/util"
 	"github.com/spf13/cobra"
@@ -305,7 +306,13 @@ func run(ctx context.Context, opts *StartOptions, log logr.Logger) error {
 		OpenShiftImageRegistryOverrides: imageRegistryOverrides,
 	}
 
+	isManagementClusterOpenShift := false
+	if mgmtClusterCaps.Has(capabilities.CapabilityRoute) {
+		isManagementClusterOpenShift = true
+	}
+
 	monitoringDashboards := (os.Getenv("MONITORING_DASHBOARDS") == "1")
+	rhobsMonitoring := (os.Getenv(rhobsmonitoring.EnvironmentVariable) == "1")
 
 	hostedClusterReconciler := &hostedcluster.HostedClusterReconciler{
 		Client:                        mgr.GetClient(),
@@ -320,6 +327,8 @@ func run(ctx context.Context, opts *StartOptions, log logr.Logger) error {
 		SREConfigHash:                 sreConfigHash,
 		KubevirtInfraClients:          kvinfra.NewKubevirtInfraClientMap(),
 		MonitoringDashboards:          monitoringDashboards,
+		RHOBSMonitoring:               rhobsMonitoring,
+		IsManagementClusterOpenShift:  isManagementClusterOpenShift,
 	}
 	if opts.OIDCStorageProviderS3BucketName != "" {
 		awsSession := awsutil.NewSession("hypershift-operator-oidc-bucket", opts.OIDCStorageProviderS3Credentials, "", "", opts.OIDCStorageProviderS3Region)

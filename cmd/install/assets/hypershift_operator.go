@@ -825,7 +825,7 @@ func (o HyperShiftOperatorServiceAccount) Build() *corev1.ServiceAccount {
 
 type HyperShiftOperatorClusterRole struct{}
 
-func (o HyperShiftOperatorClusterRole) Build() *rbacv1.ClusterRole {
+func (o HyperShiftOperatorClusterRole) Build(rhobsMonitoring bool) *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ClusterRole",
@@ -1010,6 +1010,15 @@ func (o HyperShiftOperatorClusterRole) Build() *rbacv1.ClusterRole {
 				ResourceNames: []string{hyperv1.GroupVersion.Group},
 			},
 		},
+	}
+	// This allows the cluster version operator to access HCP metrics on self-managed HyperShift.
+	if !rhobsMonitoring {
+		role.Rules = append(role.Rules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{"metrics.k8s.io"},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get"},
+			})
 	}
 	return role
 }

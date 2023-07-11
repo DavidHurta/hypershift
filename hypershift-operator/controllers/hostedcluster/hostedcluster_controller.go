@@ -172,6 +172,10 @@ type HostedClusterReconciler struct {
 	KubevirtInfraClients kvinfra.KubevirtInfraClientMap
 
 	MonitoringDashboards bool
+
+	RHOBSMonitoring bool
+
+	IsManagementClusterOpenShift bool
 }
 
 // +kubebuilder:rbac:groups=hypershift.openshift.io,resources=hostedclusters,verbs=get;list;watch;create;update;patch;delete
@@ -2002,7 +2006,7 @@ func (r *HostedClusterReconciler) reconcileControlPlaneOperator(ctx context.Cont
 	// Reconcile operator role
 	controlPlaneOperatorRole := controlplaneoperator.OperatorRole(controlPlaneNamespace.Name)
 	_, err = createOrUpdate(ctx, r.Client, controlPlaneOperatorRole, func() error {
-		return reconcileControlPlaneOperatorRole(controlPlaneOperatorRole)
+		return reconcileControlPlaneOperatorRole(controlPlaneOperatorRole, r.IsManagementClusterOpenShift, r.RHOBSMonitoring)
 	})
 	if err != nil {
 		return fmt.Errorf("failed to reconcile controlplane operator role: %w", err)
@@ -2487,7 +2491,7 @@ func reconcileControlPlaneOperatorDeployment(
 	return nil
 }
 
-func reconcileControlPlaneOperatorRole(role *rbacv1.Role) error {
+func reconcileControlPlaneOperatorRole(role *rbacv1.Role, isManagementClusterOpenShift, rhobsMonitoring bool) error {
 	role.Rules = []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{"hypershift.openshift.io"},
@@ -2639,6 +2643,14 @@ func reconcileControlPlaneOperatorRole(role *rbacv1.Role) error {
 				"update",
 			},
 		},
+	}
+	if isManagementClusterOpenShift && !rhobsMonitoring {
+		role.Rules = append(role.Rules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{"metrics.k8s.io"},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get"},
+			})
 	}
 	return nil
 }

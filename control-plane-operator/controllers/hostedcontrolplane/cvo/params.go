@@ -33,6 +33,9 @@ func NewCVOParams(hcp *hyperv1.HostedControlPlane, releaseImageProvider *imagepr
 		ClusterID:               hcp.Spec.ClusterID,
 		PlatformType:            hcp.Spec.Platform.Type,
 	}
+	p.DeploymentConfig.AdditionalLabels = map[string]string{
+		config.NeedMetricsServerAccessLabel: "true",
+	}
 	p.DeploymentConfig.Resources = config.ResourcesSpec{
 		cvoContainerPrepPayload().Name: {
 			Requests: corev1.ResourceList{

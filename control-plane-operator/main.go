@@ -21,6 +21,7 @@ import (
 	"github.com/openshift/hypershift/support/events"
 	"github.com/openshift/hypershift/support/images"
 	"github.com/openshift/hypershift/support/metrics"
+	"github.com/openshift/hypershift/support/rhobsmonitoring"
 	"github.com/openshift/hypershift/support/util"
 	tokenminter "github.com/openshift/hypershift/token-minter"
 	"go.uber.org/zap/zapcore"
@@ -388,6 +389,13 @@ func NewStartCommand() *cobra.Command {
 		}
 		setupLog.Info("Using metrics set", "set", metricsSet.String())
 
+		isManagementClusterOpenShift := false
+		if mgmtClusterCaps.Has(capabilities.CapabilityRoute) {
+			isManagementClusterOpenShift = true
+		}
+
+		rhobsMonitoring := (os.Getenv(rhobsmonitoring.EnvironmentVariable) == "1")
+
 		if err := (&hostedcontrolplane.HostedControlPlaneReconciler{
 			Client:                        mgr.GetClient(),
 			ManagementClusterCapabilities: mgmtClusterCaps,
@@ -396,6 +404,8 @@ func NewStartCommand() *cobra.Command {
 			OperateOnReleaseImage:         os.Getenv("OPERATE_ON_RELEASE_IMAGE"),
 			DefaultIngressDomain:          defaultIngressDomain,
 			MetricsSet:                    metricsSet,
+			RHOBSMonitoring:               rhobsMonitoring,
+			IsManagementClusterOpenShift:  isManagementClusterOpenShift,
 		}).SetupWithManager(mgr, upsert.New(enableCIDebugOutput).CreateOrUpdate); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "hosted-control-plane")
 			os.Exit(1)
