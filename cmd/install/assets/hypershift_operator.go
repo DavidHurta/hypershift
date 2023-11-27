@@ -302,31 +302,32 @@ func (o MonitoringDashboardTemplate) Build() *corev1.ConfigMap {
 }
 
 type HyperShiftOperatorDeployment struct {
-	AdditionalTrustBundle          *corev1.ConfigMap
-	OpenShiftTrustBundle           *corev1.ConfigMap
-	Namespace                      *corev1.Namespace
-	OperatorImage                  string
-	Images                         map[string]string
-	ServiceAccount                 *corev1.ServiceAccount
-	Replicas                       int32
-	EnableOCPClusterMonitoring     bool
-	EnableCIDebugOutput            bool
-	EnableWebhook                  bool
-	EnableValidatingWebhook        bool
-	PrivatePlatform                string
-	AWSPrivateSecret               *corev1.Secret
-	AWSPrivateSecretKey            string
-	AWSPrivateRegion               string
-	OIDCBucketName                 string
-	OIDCBucketRegion               string
-	OIDCStorageProviderS3Secret    *corev1.Secret
-	OIDCStorageProviderS3SecretKey string
-	MetricsSet                     metrics.MetricsSet
-	IncludeVersion                 bool
-	UWMTelemetry                   bool
-	RHOBSMonitoring                bool
-	MonitoringDashboards           bool
-	CertRotationScale              time.Duration
+	AdditionalTrustBundle             *corev1.ConfigMap
+	OpenShiftTrustBundle              *corev1.ConfigMap
+	Namespace                         *corev1.Namespace
+	OperatorImage                     string
+	Images                            map[string]string
+	ServiceAccount                    *corev1.ServiceAccount
+	Replicas                          int32
+	EnableOCPClusterMonitoring        bool
+	EnableCIDebugOutput               bool
+	EnableWebhook                     bool
+	EnableValidatingWebhook           bool
+	PrivatePlatform                   string
+	AWSPrivateSecret                  *corev1.Secret
+	AWSPrivateSecretKey               string
+	AWSPrivateRegion                  string
+	OIDCBucketName                    string
+	OIDCBucketRegion                  string
+	OIDCStorageProviderS3Secret       *corev1.Secret
+	OIDCStorageProviderS3SecretKey    string
+	MetricsSet                        metrics.MetricsSet
+	IncludeVersion                    bool
+	UWMTelemetry                      bool
+	RHOBSMonitoring                   bool
+	MonitoringDashboards              bool
+	CertRotationScale                 time.Duration
+	CVOManagementClusterMetricsAccess bool
 }
 
 func (o HyperShiftOperatorDeployment) Build() *appsv1.Deployment {
@@ -412,6 +413,10 @@ func (o HyperShiftOperatorDeployment) Build() *appsv1.Deployment {
 
 	if o.UWMTelemetry {
 		args = append(args, "--enable-uwm-telemetry-remote-write")
+	}
+
+	if o.CVOManagementClusterMetricsAccess {
+		args = append(args, "--enable-cvo-management-cluster-metrics-access")
 	}
 
 	image := o.OperatorImage
@@ -825,7 +830,7 @@ func (o HyperShiftOperatorServiceAccount) Build() *corev1.ServiceAccount {
 
 type HyperShiftOperatorClusterRole struct{}
 
-func (o HyperShiftOperatorClusterRole) Build(rhobsMonitoring bool) *rbacv1.ClusterRole {
+func (o HyperShiftOperatorClusterRole) Build(enableCVOManagementClusterMetricsAccess bool) *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ClusterRole",
@@ -1011,8 +1016,7 @@ func (o HyperShiftOperatorClusterRole) Build(rhobsMonitoring bool) *rbacv1.Clust
 			},
 		},
 	}
-	// This allows the cluster version operator to access HCP metrics on self-managed HyperShift.
-	if !rhobsMonitoring {
+	if enableCVOManagementClusterMetricsAccess {
 		role.Rules = append(role.Rules,
 			rbacv1.PolicyRule{
 				APIGroups: []string{"metrics.k8s.io"},

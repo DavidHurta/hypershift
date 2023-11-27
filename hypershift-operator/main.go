@@ -92,21 +92,22 @@ func main() {
 }
 
 type StartOptions struct {
-	Namespace                        string
-	DeploymentName                   string
-	PodName                          string
-	MetricsAddr                      string
-	CertDir                          string
-	EnableOCPClusterMonitoring       bool
-	EnableCIDebugOutput              bool
-	ControlPlaneOperatorImage        string
-	RegistryOverrides                map[string]string
-	PrivatePlatform                  string
-	OIDCStorageProviderS3BucketName  string
-	OIDCStorageProviderS3Region      string
-	OIDCStorageProviderS3Credentials string
-	EnableUWMTelemetryRemoteWrite    bool
-	EnableValidatingWebhook          bool
+	Namespace                               string
+	DeploymentName                          string
+	PodName                                 string
+	MetricsAddr                             string
+	CertDir                                 string
+	EnableOCPClusterMonitoring              bool
+	EnableCIDebugOutput                     bool
+	ControlPlaneOperatorImage               string
+	RegistryOverrides                       map[string]string
+	PrivatePlatform                         string
+	OIDCStorageProviderS3BucketName         string
+	OIDCStorageProviderS3Region             string
+	OIDCStorageProviderS3Credentials        string
+	EnableUWMTelemetryRemoteWrite           bool
+	EnableValidatingWebhook                 bool
+	EnableCVOManagementClusterMetricsAccess bool
 }
 
 func NewStartCommand() *cobra.Command {
@@ -142,6 +143,7 @@ func NewStartCommand() *cobra.Command {
 	cmd.Flags().StringVar(&opts.OIDCStorageProviderS3Credentials, "oidc-storage-provider-s3-credentials", opts.OIDCStorageProviderS3Credentials, "Location of the credentials file for the OIDC bucket. Required for AWS guest clusters.")
 	cmd.Flags().BoolVar(&opts.EnableUWMTelemetryRemoteWrite, "enable-uwm-telemetry-remote-write", opts.EnableUWMTelemetryRemoteWrite, "If true, enables a controller that ensures user workload monitoring is enabled and that it is configured to remote write telemetry metrics from control planes")
 	cmd.Flags().BoolVar(&opts.EnableValidatingWebhook, "enable-validating-webhook", false, "Enable webhook for validating hypershift API types")
+	cmd.Flags().BoolVar(&opts.EnableCVOManagementClusterMetricsAccess, "enable-cvo-management-cluster-metrics-access", opts.EnableCVOManagementClusterMetricsAccess, "If true, the hosted CVO will have access to the management cluster metrics server to evaluate conditional updates (supported for OpenShift management clusters)")
 
 	cmd.Run = func(cmd *cobra.Command, args []string) {
 		ctx, cancel := context.WithCancel(ctrl.SetupSignalHandler())
@@ -306,29 +308,24 @@ func run(ctx context.Context, opts *StartOptions, log logr.Logger) error {
 		OpenShiftImageRegistryOverrides: imageRegistryOverrides,
 	}
 
-	isManagementClusterOpenShift := false
-	if mgmtClusterCaps.Has(capabilities.CapabilityRoute) {
-		isManagementClusterOpenShift = true
-	}
-
 	monitoringDashboards := (os.Getenv("MONITORING_DASHBOARDS") == "1")
 	rhobsMonitoring := (os.Getenv(rhobsmonitoring.EnvironmentVariable) == "1")
 
 	hostedClusterReconciler := &hostedcluster.HostedClusterReconciler{
-		Client:                        mgr.GetClient(),
-		ManagementClusterCapabilities: mgmtClusterCaps,
-		HypershiftOperatorImage:       operatorImage,
-		ReleaseProvider:               releaseProviderWithOpenShiftImageRegistryOverrides,
-		EnableOCPClusterMonitoring:    opts.EnableOCPClusterMonitoring,
-		EnableCIDebugOutput:           opts.EnableCIDebugOutput,
-		ImageMetadataProvider:         imageMetaDataProvider,
-		MetricsSet:                    metricsSet,
-		OperatorNamespace:             opts.Namespace,
-		SREConfigHash:                 sreConfigHash,
-		KubevirtInfraClients:          kvinfra.NewKubevirtInfraClientMap(),
-		MonitoringDashboards:          monitoringDashboards,
-		RHOBSMonitoring:               rhobsMonitoring,
-		IsManagementClusterOpenShift:  isManagementClusterOpenShift,
+		Client:                                  mgr.GetClient(),
+		ManagementClusterCapabilities:           mgmtClusterCaps,
+		HypershiftOperatorImage:                 operatorImage,
+		ReleaseProvider:                         releaseProviderWithOpenShiftImageRegistryOverrides,
+		EnableOCPClusterMonitoring:              opts.EnableOCPClusterMonitoring,
+		EnableCIDebugOutput:                     opts.EnableCIDebugOutput,
+		ImageMetadataProvider:                   imageMetaDataProvider,
+		MetricsSet:                              metricsSet,
+		OperatorNamespace:                       opts.Namespace,
+		SREConfigHash:                           sreConfigHash,
+		KubevirtInfraClients:                    kvinfra.NewKubevirtInfraClientMap(),
+		MonitoringDashboards:                    monitoringDashboards,
+		RHOBSMonitoring:                         rhobsMonitoring,
+		EnableCVOManagementClusterMetricsAccess: opts.EnableCVOManagementClusterMetricsAccess,
 	}
 	if opts.OIDCStorageProviderS3BucketName != "" {
 		awsSession := awsutil.NewSession("hypershift-operator-oidc-bucket", opts.OIDCStorageProviderS3Credentials, "", "", opts.OIDCStorageProviderS3Region)

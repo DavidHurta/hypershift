@@ -108,7 +108,7 @@ func cvoLabels() map[string]string {
 
 var port int32 = 8443
 
-func ReconcileDeployment(deployment *appsv1.Deployment, ownerRef config.OwnerRef, deploymentConfig config.DeploymentConfig, controlPlaneImage, image, cliImage, availabilityProberImage, clusterID string, platformType hyperv1.PlatformType, oauthEnabled, isManagementClusterOpenShift, rhobsMonitoring bool) error {
+func ReconcileDeployment(deployment *appsv1.Deployment, ownerRef config.OwnerRef, deploymentConfig config.DeploymentConfig, controlPlaneImage, image, cliImage, availabilityProberImage, clusterID string, platformType hyperv1.PlatformType, oauthEnabled, enableCVOManagementClusterMetricsAccess bool) error {
 	ownerRef.ApplyTo(deployment)
 
 	// preserve existing resource requirements for main CVO container
@@ -129,14 +129,13 @@ func ReconcileDeployment(deployment *appsv1.Deployment, ownerRef config.OwnerRef
 				Labels: cvoLabels(),
 			},
 			Spec: corev1.PodSpec{
-				ServiceAccountName:           manifests.ClusterVersionOperatorServiceAccount("").Name,
-				AutomountServiceAccountToken: pointer.Bool(true),
+				AutomountServiceAccountToken: pointer.Bool(false),
 				InitContainers: []corev1.Container{
 					util.BuildContainer(cvoContainerPrepPayload(), buildCVOContainerPrepPayload(image, platformType, oauthEnabled)),
 					util.BuildContainer(cvoContainerBootstrap(), buildCVOContainerBootstrap(cliImage, clusterID)),
 				},
 				Containers: []corev1.Container{
-					util.BuildContainer(cvoContainerMain(), buildCVOContainerMain(controlPlaneImage, image, deployment.Namespace, isManagementClusterOpenShift, rhobsMonitoring)),
+					util.BuildContainer(cvoContainerMain(), buildCVOContainerMain(controlPlaneImage, image, deployment.Namespace, enableCVOManagementClusterMetricsAccess)),
 				},
 				Volumes: []corev1.Volume{
 					util.BuildVolume(cvoVolumePayload(), buildCVOVolumePayload),
@@ -146,6 +145,10 @@ func ReconcileDeployment(deployment *appsv1.Deployment, ownerRef config.OwnerRef
 				},
 			},
 		},
+	}
+	if enableCVOManagementClusterMetricsAccess {
+		deployment.Spec.Template.Spec.ServiceAccountName = manifests.ClusterVersionOperatorServiceAccount("").Name
+		deployment.Spec.Template.Spec.AutomountServiceAccountToken = pointer.Bool(true)
 	}
 	deploymentConfig.ApplyTo(deployment)
 	util.AvailabilityProber(
@@ -319,7 +322,7 @@ oc get clusterversion/version &> /dev/null || oc create -f /tmp/clusterversion.y
 	return fmt.Sprintf(scriptTemplate, clusterID, payloadDir)
 }
 
-func buildCVOContainerMain(image, releaseImage, namespace string, isManagementClusterOpenShift, rhobsMonitoring bool) func(c *corev1.Container) {
+func buildCVOContainerMain(image, releaseImage, namespace string, enableCVOManagementClusterMetricsAccess bool) func(c *corev1.Container) {
 	cpath := func(vol, file string) string {
 		return path.Join(volumeMounts.Path(cvoContainerMain().Name, vol), file)
 	}
@@ -339,7 +342,7 @@ func buildCVOContainerMain(image, releaseImage, namespace string, isManagementCl
 			"--hypershift=true",
 			"--v=4",
 		}
-		if isManagementClusterOpenShift && !rhobsMonitoring {
+		if enableCVOManagementClusterMetricsAccess {
 			c.Args = append(c.Args, "--use-dns-for-services=true")
 			c.Args = append(c.Args, "--metrics-ca-bundle-file=/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt")
 			c.Args = append(c.Args, fmt.Sprintf("--metrics-url=https://thanos-querier.openshift-monitoring.svc:9092?namespace=%s", namespace))
@@ -487,8 +490,8 @@ func ReconcileServiceMonitor(sm *prometheusoperatorv1.ServiceMonitor, ownerRef c
 	return nil
 }
 
-func ReconcileRole(role *rbacv1.Role, ownerRef config.OwnerRef, isManagementClusterOpenShift, rhobsMonitoring bool) error {
-	if isManagementClusterOpenShift && !rhobsMonitoring {
+func ReconcileRole(role *rbacv1.Role, ownerRef config.OwnerRef, enableCVOManagementClusterMetricsAccess bool) error {
+	if enableCVOManagementClusterMetricsAccess {
 		role.Rules = []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"metrics.k8s.io"},

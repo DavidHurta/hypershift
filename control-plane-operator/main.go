@@ -151,18 +151,19 @@ func NewStartCommand() *cobra.Command {
 	}
 
 	var (
-		namespace                        string
-		deploymentName                   string
-		metricsAddr                      string
-		healthProbeAddr                  string
-		hostedClusterConfigOperatorImage string
-		socks5ProxyImage                 string
-		availabilityProberImage          string
-		tokenMinterImage                 string
-		inCluster                        bool
-		enableCIDebugOutput              bool
-		registryOverrides                map[string]string
-		imageOverrides                   map[string]string
+		namespace                               string
+		deploymentName                          string
+		metricsAddr                             string
+		healthProbeAddr                         string
+		hostedClusterConfigOperatorImage        string
+		socks5ProxyImage                        string
+		availabilityProberImage                 string
+		tokenMinterImage                        string
+		inCluster                               bool
+		enableCIDebugOutput                     bool
+		registryOverrides                       map[string]string
+		imageOverrides                          map[string]string
+		enableCVOManagementClusterMetricsAccess bool
 	)
 
 	cmd.Flags().StringVar(&namespace, "namespace", os.Getenv("MY_NAMESPACE"), "The namespace this operator lives in (required)")
@@ -177,6 +178,7 @@ func NewStartCommand() *cobra.Command {
 		"cluster and will make some internal decisions to ease local development (e.g. using external endpoints where possible"+
 		"to avoid assuming access to the service network)")
 	cmd.Flags().BoolVar(&enableCIDebugOutput, "enable-ci-debug-output", false, "If extra CI debug output should be enabled")
+	cmd.Flags().BoolVar(&enableCVOManagementClusterMetricsAccess, "enable-cvo-management-cluster-metrics-access", false, "If true, the hosted CVO will have access to the management cluster metrics server to evaluate conditional updates (supported for OpenShift management clusters)")
 	cmd.Flags().StringToStringVar(&registryOverrides, "registry-overrides", map[string]string{}, "registry-overrides contains the source registry string as a key and the destination registry string as value. Images before being applied are scanned for the source registry string and if found the string is replaced with the destination registry string. Format is: sr1=dr1,sr2=dr2")
 	cmd.Flags().StringToStringVar(&imageOverrides, "image-overrides", map[string]string{},
 		"List of images that should be used for a hosted cluster control plane instead of images from OpenShift release specified in HostedCluster. "+
@@ -389,23 +391,18 @@ func NewStartCommand() *cobra.Command {
 		}
 		setupLog.Info("Using metrics set", "set", metricsSet.String())
 
-		isManagementClusterOpenShift := false
-		if mgmtClusterCaps.Has(capabilities.CapabilityRoute) {
-			isManagementClusterOpenShift = true
-		}
-
 		rhobsMonitoring := (os.Getenv(rhobsmonitoring.EnvironmentVariable) == "1")
 
 		if err := (&hostedcontrolplane.HostedControlPlaneReconciler{
-			Client:                        mgr.GetClient(),
-			ManagementClusterCapabilities: mgmtClusterCaps,
-			ReleaseProvider:               releaseProvider,
-			EnableCIDebugOutput:           enableCIDebugOutput,
-			OperateOnReleaseImage:         os.Getenv("OPERATE_ON_RELEASE_IMAGE"),
-			DefaultIngressDomain:          defaultIngressDomain,
-			MetricsSet:                    metricsSet,
-			RHOBSMonitoring:               rhobsMonitoring,
-			IsManagementClusterOpenShift:  isManagementClusterOpenShift,
+			Client:                                  mgr.GetClient(),
+			ManagementClusterCapabilities:           mgmtClusterCaps,
+			ReleaseProvider:                         releaseProvider,
+			EnableCIDebugOutput:                     enableCIDebugOutput,
+			OperateOnReleaseImage:                   os.Getenv("OPERATE_ON_RELEASE_IMAGE"),
+			DefaultIngressDomain:                    defaultIngressDomain,
+			MetricsSet:                              metricsSet,
+			RHOBSMonitoring:                         rhobsMonitoring,
+			EnableCVOManagementClusterMetricsAccess: enableCVOManagementClusterMetricsAccess,
 		}).SetupWithManager(mgr, upsert.New(enableCIDebugOutput).CreateOrUpdate); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "hosted-control-plane")
 			os.Exit(1)

@@ -77,8 +77,7 @@ func (r *HostedClusterReconciler) reconcileNetworkPolicies(ctx context.Context, 
 		}
 
 		// Allow egress communication to the HCP metrics server for pods that have a known annotation.
-		// Reconcile metrics server network policy for self-managed HyperShift running on OpenShift cluster
-		if r.IsManagementClusterOpenShift && !r.RHOBSMonitoring {
+		if r.EnableCVOManagementClusterMetricsAccess {
 			policy = networkpolicy.MetricsServerNetworkPolicy(controlPlaneNamespaceName)
 			if _, err := createOrUpdate(ctx, r.Client, policy, func() error {
 				return reconcileMetricsServerNetworkPolicy(policy)

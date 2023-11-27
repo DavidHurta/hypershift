@@ -153,19 +153,19 @@ type HostedControlPlaneReconciler struct {
 	// SetDefaultSecurityContext is used to configure Security Context for containers
 	SetDefaultSecurityContext bool
 
-	Log                           logr.Logger
-	ReleaseProvider               releaseinfo.ProviderWithOpenShiftImageRegistryOverrides
-	createOrUpdate                func(hcp *hyperv1.HostedControlPlane) upsert.CreateOrUpdateFN
-	EnableCIDebugOutput           bool
-	OperateOnReleaseImage         string
-	DefaultIngressDomain          string
-	MetricsSet                    metrics.MetricsSet
-	SREConfigHash                 string
-	ec2Client                     ec2iface.EC2API
-	awsSession                    *session.Session
-	reconcileInfrastructureStatus func(ctx context.Context, hcp *hyperv1.HostedControlPlane) (InfrastructureStatus, error)
-	RHOBSMonitoring               bool
-	IsManagementClusterOpenShift  bool
+	Log                                     logr.Logger
+	ReleaseProvider                         releaseinfo.ProviderWithOpenShiftImageRegistryOverrides
+	createOrUpdate                          func(hcp *hyperv1.HostedControlPlane) upsert.CreateOrUpdateFN
+	EnableCIDebugOutput                     bool
+	OperateOnReleaseImage                   string
+	DefaultIngressDomain                    string
+	MetricsSet                              metrics.MetricsSet
+	SREConfigHash                           string
+	ec2Client                               ec2iface.EC2API
+	awsSession                              *session.Session
+	reconcileInfrastructureStatus           func(ctx context.Context, hcp *hyperv1.HostedControlPlane) (InfrastructureStatus, error)
+	RHOBSMonitoring                         bool
+	EnableCVOManagementClusterMetricsAccess bool
 }
 
 func (r *HostedControlPlaneReconciler) SetupWithManager(mgr ctrl.Manager, createOrUpdate upsert.CreateOrUpdateFN) error {
@@ -2886,7 +2886,7 @@ func (r *HostedControlPlaneReconciler) reconcileClusterVersionOperator(ctx conte
 
 	role := manifests.ClusterVersionOperatorRole(hcp.Namespace)
 	if _, err := createOrUpdate(ctx, r.Client, role, func() error {
-		return cvo.ReconcileRole(role, p.OwnerRef, r.IsManagementClusterOpenShift, r.RHOBSMonitoring)
+		return cvo.ReconcileRole(role, p.OwnerRef, r.EnableCVOManagementClusterMetricsAccess)
 	}); err != nil {
 		return fmt.Errorf("failed to reconcile cluster version operator role: %w", err)
 	}
@@ -2900,7 +2900,7 @@ func (r *HostedControlPlaneReconciler) reconcileClusterVersionOperator(ctx conte
 
 	deployment := manifests.ClusterVersionOperatorDeployment(hcp.Namespace)
 	if _, err := createOrUpdate(ctx, r, deployment, func() error {
-		return cvo.ReconcileDeployment(deployment, p.OwnerRef, p.DeploymentConfig, p.ControlPlaneImage, p.Image, p.CLIImage, p.AvailabilityProberImage, p.ClusterID, p.PlatformType, util.HCPOAuthEnabled(hcp), r.IsManagementClusterOpenShift, r.RHOBSMonitoring)
+		return cvo.ReconcileDeployment(deployment, p.OwnerRef, p.DeploymentConfig, p.ControlPlaneImage, p.Image, p.CLIImage, p.AvailabilityProberImage, p.ClusterID, p.PlatformType, util.HCPOAuthEnabled(hcp), r.EnableCVOManagementClusterMetricsAccess)
 	}); err != nil {
 		return fmt.Errorf("failed to reconcile cluster version operator deployment: %w", err)
 	}
