@@ -546,6 +546,14 @@ type HostedClusterSpec struct {
 	// +optional
 	Configuration *ClusterConfiguration `json:"configuration,omitempty"`
 
+	// OperatorConfiguration specifies configuration for individual OCP operators in the
+	// cluster, represented as embedded resources that correspond to the openshift
+	// operator API.
+	//
+	// +optional
+	// +openshift:enable:FeatureGate=ClusterVersionOperatorConfiguration
+	OperatorConfiguration *OperatorConfiguration `json:"operatorConfiguration,omitempty"`
+
 	// AuditWebhook contains metadata for configuring an audit webhook endpoint
 	// for a cluster to process cluster audit events. It references a secret that
 	// contains the webhook information for the audit webhook endpoint. It is a
@@ -1594,6 +1602,16 @@ type ClusterConfiguration struct {
 	// +rollout
 	// +optional
 	Proxy *configv1.ProxySpec `json:"proxy,omitempty"`
+}
+
+// OperatorConfiguration specifies configuration for individual OCP operators in the
+// cluster, represented as embedded resources that correspond to the openshift
+// operator API.
+type OperatorConfiguration struct {
+	// ClusterVersionOperator specifies the configuration for the Cluster Version Operator in the hosted cluster.
+	//
+	// +optional
+	ClusterVersionOperator ClusterVersionOperatorSpec `json:"clusterVersionOperator,omitempty"`
 }
 
 // +genclient
